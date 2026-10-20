@@ -11,32 +11,51 @@ permissions:
   contents: read
 
 jobs:
-  smoke:
-    name: Smoke test (ubuntu-latest)
+  build:
+    name: Vet, test, build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show runner info
-        run: |
-          echo "runner OS : $RUNNER_OS"
-          echo "arch      : $RUNNER_ARCH"
-          echo "image     : ${ImageOS:-n/a}"
-          uname -a
-          python3 --version
-          git --version
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
-      - name: Check repo files
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::以下文件未格式化，请运行 gofmt -w ."
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        run: go build -trimpath -o bin/server ./cmd/server
+
+      - name: Smoke test binary
         run: |
           set -euo pipefail
-          for f in README.md .gitignore .gitattributes; do
-            if [ ! -f "$f" ]; then
-              echo "::error file=$f::missing required file"
-              exit 1
-            fi
-            echo "ok: $f"
+          ./bin/server &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/healthz > /dev/null 2>&1; then break; fi
+            sleep 0.3
           done
+          curl -fsS http://127.0.0.1:8080/healthz
+          curl -fsS -X POST http://127.0.0.1:8080/api/items \
+            -H 'content-type: application/json' -d '{"title":"from-ci"}'
+          curl -fsS http://127.0.0.1:8080/api/items
 
       - name: Grep for accidentally committed secrets
         run: |
