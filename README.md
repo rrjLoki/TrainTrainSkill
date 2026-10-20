@@ -25,7 +25,7 @@ Go 后端骨架：标准库 HTTP 服务 + OpenAI 兼容的模型调用客户端�
 go version
 
 # 2. 跑起来（环境变量都有默认值，可以不配）
-make run                    # 等价于 go run ./cmd/server
+go run ./cmd/server
 
 # 3. 验证
 curl -s localhost:8080/healthz
@@ -61,12 +61,20 @@ curl -s localhost:8080/api/items
 ## 常用命令
 
 ```bash
-make test          # 单元测试
-make vet           # 静态检查
-make fmt           # 格式化
-make build         # 本机编译
-make build-linux   # 交叉编译 linux/amd64，用于部署
+go run ./cmd/server                  # 开发启动
+go build -trimpath -o bin/server ./cmd/server
+go test ./...                        # 单元测试
+go test -race -count=1 ./...         # 竞态检测（需要 gcc）
+go vet ./...                         # 静态检查
+gofmt -l -w .                        # 格式化
 ```
+
+`Makefile` 提供同样的快捷方式（`make run` / `make test` / `make build` / `make build-linux`），
+但 Debian/Ubuntu 的精简镜像默认没有 `make`，需要先 `sudo apt install make`。
+**没有 make 不影响任何功能**，直接用上面的 `go` 命令即可。
+
+> 交叉编译只需改环境变量：`GOOS=linux GOARCH=amd64 go build -trimpath -o bin/server ./cmd/server`。
+> `go test -race` 依赖 cgo + gcc，CI 的 `ubuntu-latest` 自带；本机没装 gcc 时跳过该项即可。
 
 ## 设计取舍
 
