@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke test (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show runner info
+        run: |
+          echo "runner OS : $RUNNER_OS"
+          echo "arch      : $RUNNER_ARCH"
+          echo "image     : ${ImageOS:-n/a}"
+          uname -a
+          python3 --version
+          git --version
+
+      - name: Check repo files
+        run: |
+          set -euo pipefail
+          for f in README.md .gitignore .gitattributes; do
+            if [ ! -f "$f" ]; then
+              echo "::error file=$f::missing required file"
+              exit 1
+            fi
+            echo "ok: $f"
+          done
+
+      - name: Grep for accidentally committed secrets
+        run: |
+          set -euo pipefail
+          if grep -rInE '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})' \
+               --exclude-dir=.git . ; then
+            echo "::error::potential credential found in tracked files"
+            exit 1
+          fi
+          echo "no obvious credentials found"
